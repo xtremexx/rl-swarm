@@ -160,9 +160,10 @@ def hivemind_cumulative_reward(
     ]
     
     if output_signal_selector == "max":
-        maximal_reward_idx    maximal_reward_idx, responses = (
+        maximal_reward_idx, responses = (
             np.argmax(total_reward),
             [completion[0]["content"] for completion in completions],
+        )
             
         output_data = {
             "question": prompts[0][-1]["content"],
