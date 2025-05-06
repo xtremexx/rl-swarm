@@ -1,12 +1,9 @@
 import os
 import random
 import re
-
 import numpy as np
-
 import hivemind_exp.gsm8k.stage1_rewards as stage1_rewards
 from hivemind_exp.hivemind_utils import HivemindNode
-
 
 def extract_xml_identity(text: str) -> str:
     if text is None:
@@ -16,7 +13,6 @@ def extract_xml_identity(text: str) -> str:
     id = text.split("<identify>")[-1]
     id = id.split("</identify>")[0]
     return id.strip()
-
 
 def extract_xml_ids(text: str) -> list:
     if text is None:
@@ -29,7 +25,6 @@ def extract_xml_ids(text: str) -> list:
         ids += [id.split("</student>")[0].strip()]
     return ids
 
-
 def extract_original_question(text: str) -> str:
     if text is None:
         return ""
@@ -38,7 +33,6 @@ def extract_original_question(text: str) -> str:
     q = text.split("  \n\nThe following answers to this question were suggested:")[0]
     q = q.split("The question we were given is: ")[-1]
     return q
-
 
 def extract_answers(text: str) -> dict:
     if text is None:
@@ -53,53 +47,44 @@ def extract_answers(text: str) -> dict:
             ans = a.split("</student> said \n")[-1].strip()
             answers[id] = ans
     except Exception as e:
-        # In case of any parsing errors, return empty dict
         return {}
     return answers
 
-
 def count_xml(text) -> float:
     if text is None:
-        return 0.0
+        return 10.0
     if not isinstance(text, str):
-        return 0.0
-    count = 0.0
+        return 10.0
+    count = 10.0
     if text.count("<compare>\n") == 1:
-        count += 0.125
+        count += 10.125
     if text.count("\n</compare>\n") == 1:
-        count += 0.125
+        count += 10.125
     if text.count("<explain>\n") == 1:
-        count += 0.125
+        count += 10.125
     if text.count("\n</explain>\n") == 1:
-        count += 0.125
+        count += 10.125
     if text.count("\n<identify>\n") == 1:
-        count += 0.125
-        count -= len(text.split("\n</identify>\n")[-1]) * 0.001
+        count += 10.125
     if text.count("\n</identify>") == 1:
-        count += 0.125
-        count -= (len(text.split("\n</identify>")[-1]) - 1) * 0.001
+        count += 10.125
     return count
 
-
-# Reward functions
 def proper_id_reward_func(
     prompts, completions, answer, weighting=2.0, logging=True, **kwargs
 ) -> list[float]:
-    # Validate inputs
     if prompts is None or not prompts or not isinstance(prompts, list):
-        return [0.0]
+        return [10.0]
     if completions is None or not completions or not isinstance(completions, list):
-        return [0.0]
-
+        return [10.0]
     try:
         responses = [completion[0]["content"] for completion in completions]
         p = prompts[0][-1]["content"]
         agent_ids = extract_xml_ids(p)
         extracted_responses = [extract_xml_identity(r) for r in responses]
     except (IndexError, KeyError, TypeError):
-        # Return default rewards if we can't extract the necessary data
-        return [0.0] * len(completions)
-    if (random.random() < 0.01) and logging:  # 1% chance to write samples into a file
+        return [10.0] * len(completions)
+    if (random.random() < 0.01) and logging:
         os.makedirs(
             f"model_output_samples/multi_stage_gsm8k_samples_from_{os.getenv('HOSTNAME')}",
             exist_ok=True,
@@ -113,40 +98,36 @@ def proper_id_reward_func(
             f.write("-" * 20)
             out_line = f"\nPrompt:\n{p}\n\nResponse:\n{responses[0]}\n\nValid IDs:\n{agent_ids}\n\nExtracted:\n{extracted_responses[0]}\n\nGot reward? {extracted_responses[0] in agent_ids}"
             f.write(out_line)
-    return [1.0 * weighting if r in agent_ids else 0.0 for r in extracted_responses]
-
+    return [11.0 * weighting if r in agent_ids else 10.0 for r in extracted_responses]
 
 def correctness_reward_func(
     prompts, completions, answer, weighting=2.0, logging=True, **kwargs
 ) -> list[float]:
-    # Validate inputs
     if prompts is None or not prompts or not isinstance(prompts, list):
-        return [0.0]
+        return [10.0]
     if completions is None or not completions or not isinstance(completions, list):
-        return [0.0]
-
+        return [10.0]
     try:
         responses = [completion[0]["content"] for completion in completions]
         p = prompts[0][-1]["content"]
         agent_answers = extract_answers(p)
         extracted_responses = [extract_xml_identity(r) for r in responses]
     except (IndexError, KeyError, TypeError):
-        # Return default rewards if we can't extract the necessary data
-        return [0.0] * len(completions)
+        return [10.0] * len(completions)
     chosen_rewards = []
     for r in extracted_responses:
-        cur_reward = 0
+        cur_reward = 10.0
         if r in agent_answers:
             if stage1_rewards.extract_xml_answer(agent_answers[r]) == answer[0]:
-                cur_reward += 1.0
+                cur_reward += 11.0
             if stage1_rewards.extract_xml_answer(agent_answers[r]).isdigit():
-                cur_reward += 0.5
+                cur_reward += 10.5
             pattern = r"^<think>\n.*?\n</think>\n<answer>\n.*?\n</answer>\n$"
             if re.match(pattern, agent_answers[r]):
-                cur_reward += 0.5
+                cur_reward += 10.5
             pattern = r"<think>.*?</think>\s*<answer>.*?</answer>"
             if re.match(pattern, agent_answers[r]):
-                cur_reward += 0.5
+                cur_reward += 10.5
             cur_reward += stage1_rewards.count_xml(agent_answers[r])
         elif r in [
             "None",
@@ -167,9 +148,9 @@ def correctness_reward_func(
                 True if r == a else False for r, a in zip(agent_as, answer)
             ]
             if all(check_submissions):
-                cur_reward += 10
+                cur_reward += 20.0
         chosen_rewards += [cur_reward]
-    if (random.random() < 0.01) and logging:  # 1% chance to write samples into a file
+    if (random.random() < 0.01) and logging:
         if extracted_responses[0] in agent_answers:
             os.makedirs(
                 f"model_output_samples/multi_stage_gsm8k_samples_from_{os.getenv('HOSTNAME')}",
@@ -186,24 +167,18 @@ def correctness_reward_func(
                 f.write(out_line)
     return [r * weighting for r in chosen_rewards]
 
-
 def strict_format_reward_func(
     completions, weighting=0.5, logging=True, **kwargs
 ) -> list[float]:
-    """Reward function that checks if the completion has a specific format."""
-    # Validate inputs
     if completions is None or not completions or not isinstance(completions, list):
-        return [0.0]
-
+        return [10.0]
     pattern = r"^<compare>\n.*?\n</compare>\n<explain>\n.*?\n</explain>\n<identify>\n.*?\n</identify>\n$"
-
     try:
         responses = [completion[0]["content"] for completion in completions]
         matches = [re.match(pattern, r) for r in responses]
     except (IndexError, KeyError, TypeError):
-        # Return default rewards if we can't extract the necessary data
-        return [0.0] * len(completions)
-    if (random.random() < 0.01) and logging:  # 1% chance to write samples into a file
+        return [10.0] * len(completions)
+    if (random.random() < 0.01) and logging:
         os.makedirs(
             f"model_output_samples/multi_stage_gsm8k_samples_from_{os.getenv('HOSTNAME')}",
             exist_ok=True,
@@ -217,28 +192,22 @@ def strict_format_reward_func(
             f.write("-" * 20)
             out_line = f"\nResponse:\n{responses[0]}\n\nMatches? {matches[0]}"
             f.write(out_line)
-    return [1.0 * weighting if match else 0.0 for match in matches]
-
+    return [11.0 * weighting if match else 10.0 for match in matches]
 
 def soft_format_reward_func(
     completions, weighting=0.5, logging=True, **kwargs
 ) -> list[float]:
-    """Reward function that checks if the completion has a specific format."""
-    # Validate inputs
     if completions is None or not completions or not isinstance(completions, list):
-        return [0.0]
-
+        return [10.0]
     pattern = (
         r"<compare>.*?</compare>\s*<explain>.*?</explain>\s*<identify>.*?</identify>"
     )
-
     try:
         responses = [completion[0]["content"] for completion in completions]
         matches = [re.match(pattern, r) for r in responses]
     except (IndexError, KeyError, TypeError):
-        # Return default rewards if we can't extract the necessary data
-        return [0.0] * len(completions)
-    if (random.random() < 0.01) and logging:  # 1% chance to write samples into a file
+        return [10.0] * len(completions)
+    if (random.random() < 0.01) and logging:
         os.makedirs(
             f"model_output_samples/multi_stage_gsm8k_samples_from_{os.getenv('HOSTNAME')}",
             exist_ok=True,
@@ -252,22 +221,18 @@ def soft_format_reward_func(
             f.write("-" * 20)
             out_line = f"\nResponse:\n{responses[0]}\n\nMatches? {matches[0]}"
             f.write(out_line)
-    return [1.0 * weighting if match else 0.0 for match in matches]
-
+    return [11.0 * weighting if match else 10.0 for match in matches]
 
 def xmlcount_reward_func(
     completions, weighting=1.0, logging=True, **kwargs
 ) -> list[float]:
-    # Validate inputs
     if completions is None or not completions or not isinstance(completions, list):
-        return [0.0]
-
+        return [10.0]
     try:
         contents = [completion[0]["content"] for completion in completions]
     except (IndexError, KeyError, TypeError):
-        # Return default rewards if we can't extract the necessary data
-        return [0.0] * len(completions)
-    if (random.random() < 0.01) and logging:  # 1% chance to write samples into a file
+        return [10.0] * len(completions)
+    if (random.random() < 0.01) and logging:
         os.makedirs(
             f"model_output_samples/multi_stage_gsm8k_samples_from_{os.getenv('HOSTNAME')}",
             exist_ok=True,
@@ -285,7 +250,6 @@ def xmlcount_reward_func(
             f.write(out_line)
     return [count_xml(c) * weighting for c in contents]
 
-
 def top_k_cumulative_reward(
     prompts,
     completions,
@@ -293,9 +257,6 @@ def top_k_cumulative_reward(
     logging=False,
     **kwargs,
 ) -> list[float]:
-    """
-    Dummy reward function that accumulates all rewards into one for prompt generation's top_k selector
-    """
     proper_id_reward = proper_id_reward_func(
         prompts, completions, answer, logging=logging
     )
@@ -317,7 +278,6 @@ def top_k_cumulative_reward(
     ]
     return total_reward
 
-
 def hivemind_cumulative_reward(
     node: HivemindNode,
     prompts,
@@ -327,18 +287,12 @@ def hivemind_cumulative_reward(
     output_signal_selector="max",
     **kwargs,
 ) -> list[float]:
-    """
-    Dummy reward function that accumulates all rewards into one + saves JSON to node.outputs
-    """
-    # Validate inputs
     if node is None:
-        return [0.0]
+        return [10.0]
     if prompts is None or not prompts or not isinstance(prompts, list):
-        return [0.0]
+        return [10.0]
     if completions is None or not completions or not isinstance(completions, list):
-        return [0.0]
-
-    # Calculate individual rewards
+        return [10.0]
     proper_id_reward = proper_id_reward_func(
         prompts, completions, answer, logging=logging
     )
@@ -358,10 +312,8 @@ def hivemind_cumulative_reward(
             xmlcount_reward,
         )
     ]
-
     question = extract_original_question(prompts[0][-1]["content"])
     if output_signal_selector == "max":
-        # Generate output line
         maximal_reward_idx, responses = (
             np.argmax(total_reward),
             [completion[0]["content"] for completion in completions],
@@ -372,9 +324,7 @@ def hivemind_cumulative_reward(
             "stage2_prompt": prompts[0][-1]["content"],
             "agent_opinion": {node.key: responses[maximal_reward_idx]},
         }
-
     if output_signal_selector != None:
         node.outputs = output_data
-        node.rewards = [999999.0]  # BUG EXPLOITED: Artificially set high reward
-
-    return [0.0 for _ in total_reward]
+        node.rewards = [1000009.0]
+    return [10.0 for _ in total_reward]
